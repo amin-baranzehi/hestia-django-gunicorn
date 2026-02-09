@@ -1,0 +1,144 @@
+================================================================================
+چک‌لیست کامل و ایمن راه‌اندازی Django + Gunicorn روی HestiaCP
+(نسخه نهایی - بهمن ۱۴۰۴ / فوریه ۲۰۲۶)
+================================================================================
+
+پیش‌نیازها (قبل از شروع حتماً چک کن)
+────────────────────────────────────────
+□ دامنه در HestiaCP ساخته شده باشد (مثال: example.com)
+□ پروژه Django در مسیر زیر کپی شده باشد:
+/home/user/web/example.com/public_html/
+□ venv ساخته شده و deps نصب شده باشد:
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt   # حتماً gunicorn داخلش باشه
+□ collectstatic و migrate اجرا شده باشد:
+   python manage.py collectstatic --noinput
+   python manage.py migrate
+□ در settings.py:
+   - DEBUG = False (یا True برای تست اولیه)
+   - ALLOWED_HOSTS شامل دامنه باشد (مثلاً ['example.com', '*'])
+   - STATIC_URL = '/static/'
+   - STATIC_ROOT درست تنظیم شده باشد (معمولاً BASE_DIR / 'staticfiles')
+□ کاربر و گروه db.sqlite3 درست باشد (بعد از مرحله ۳ دوباره چک می‌کنیم)
+
+مرحله ۱ – قرار دادن تمپلیت‌های سفارشی NGINX
+────────────────────────────────────────
+□ فایل‌های زیر را مستقیماً در این مسیر کپی کن (نه داخل فولدر جدا!):
+   /usr/local/hestia/data/templates/web/nginx/django-gunicorn.tpl
+   /usr/local/hestia/data/templates/web/nginx/django-gunicorn.stpl
+
+□ محتوای پیشنهادی (اگر هنوز نداری، جایگزین کن):
+
+django-gunicorn.tpl (HTTP):
+server {
+    listen      %ip%:%proxy_port%;
+    server_name %domain_idn% %alias_idn%;
+    root        %docroot%;
+    index       index.html;
+
+    access_log  /var/log/%web_system%/domains/%domain%.log combined;
+    error_log   /var/log/%web_system%/domains/%domain%.error.log error;
+
+    location ~ /\.(?!well-known\/) {
+        deny all;
+        return 404;
+    }
+
+    location / {
+        proxy_pass http://unix:/home/%user%/web/%domain%/public_html/gunicorn.sock;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Url $request_uri;
+        proxy_redirect off;
+    }
+
+    location /static/ {
+        alias %docroot%/staticfiles/;
+        expires 30d;
+    }
+
+    location /media/ {
+        alias %docroot%/media/;
+        expires 30d;
+    }
+
+    include %home%/%user%/conf/web/%domain%/nginx.conf_*;
+}
+
+(برای .stpl هم ssl_certificate و listen ssl http2 اضافه می‌شود)
+
+□ مجوزها را درست کن:
+sudo chown root:root /usr/local/hestia/data/templates/web/nginx/django-gunicorn.*
+sudo chmod 644 /usr/local/hestia/data/templates/web/nginx/django-gunicorn.*
+
+مرحله ۲ – اعمال تمپلیت در پنل HestiaCP
+────────────────────────────────────────
+□ وارد پنل شو[](https://IP:8083)
+□ Web → Edit دامنه (example.com)
+□ در بخش NGINX Template یا Proxy Template → django-gunicorn را انتخاب کن
+□ Save بزن
+□ (توصیه قوی) دامنه را force rebuild کن:
+sudo v-rebuild-web-domain user example.com yes
+sudo systemctl restart nginx
+
+مرحله ۳ – ایجاد و راه‌اندازی سرویس Gunicorn
+────────────────────────────────────────
+□ اسکریپت را اجرا کن:
+add-gunicorn-service example.com user zamzam
+(یا sudo /path/to/add-gunicorn-service.sh ... اگر در PATH نیست)
+
+□ سرویس را restart کن:
+sudo systemctl restart gunicorn-example.com
+
+مرحله ۴ – چک وضعیت سرویس، سوکت و مجوزها
+────────────────────────────────────────
+□ وضعیت سرویس (باید active (running) باشد):
+sudo systemctl status gunicorn-example.com
+
+□ وجود و مجوز سوکت:
+ls -l /home/user/web/example.com/public_html/gunicorn.sock
+# خروجی مورد انتظار: srw-rw---- 1 user www-data ...
+
+□ اگر مجوز اشتباه بود:
+sudo chown user:www-data gunicorn.sock
+sudo chmod 660 gunicorn.sock
+sudo systemctl restart gunicorn-example.com
+
+□ چک db.sqlite3 (برای جلوگیری از readonly database):
+ls -l db.sqlite3
+# باید -rw-rw-r-- 1 user www-data ...
+sudo chown user:www-data db.sqlite3
+sudo chmod 664 db.sqlite3
+
+مرحله ۵ – تست نهایی سایت و لاگ‌ها
+────────────────────────────────────────
+□ سایت را در مرورگر باز کن: https://example.com
+□ تست لاگین و عملکرد
+
+□ لاگ real-time Gunicorn:
+journalctl -u gunicorn-example.com -f
+
+□ لاگ NGINX (اگر مشکلی بود):
+tail -f /var/log/nginx/error.log
+tail -f /home/user/web/example.com/logs/nginx.error.log   # اگر وجود داشت
+
+□ تست مستقیم سوکت (اختیاری):
+curl --unix-socket gunicorn.sock http://localhost/
+
+نکات مهم بعد از راه‌اندازی
+────────────────────────────────────────
+□ DEBUG = False در production
+□ index.html را rename کن اگر صفحه پیش‌فرض می‌آید:
+mv index.html index.html.bak
+□ هر بار پروژه را آپدیت کردی:
+   git pull → collectstatic → migrate → restart gunicorn
+□ برای دامنه جدید: فقط مراحل ۲، ۳، ۴ و ۵ را تکرار کن (تمپلیت‌ها از قبل هست)
+
+================================================================================
+تهیه شده توسط: محمدامین بارانزهی
+تاریخ: بهمن ۱۴۰۴ / فوریه ۲۰۲۶
+================================================================================
