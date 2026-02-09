@@ -1,6 +1,7 @@
 #=========================================================================#
 # Django + Gunicorn Socket Template for HestiaCP
 #=========================================================================#
+
 server {
     listen      %ip%:%proxy_port%;
     server_name %domain_idn% %alias_idn%;
