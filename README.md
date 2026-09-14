@@ -174,4 +174,4 @@ CSRF_TRUSTED_ORIGINS = ['https://yourdomain.com']
 
 MIT License — see [LICENSE](LICENSE) for details.
 
-**Prepared with ❤️ by [MohammadAmin Baranzehi](https://amin.baranzehi.com)**
+**Prepared by [MohammadAmin Baranzehi](https://amin.baranzehi.com)**

@@ -254,28 +254,29 @@ def print_report(report: DiagnosticReport) -> None:
     GREEN = "\033[92m"
     YELLOW = "\033[93m"
     RED = "\033[91m"
+    CYAN = "\033[96m"
     BOLD = "\033[1m"
 
     dc = report.domain_config
-    print(f"\n{BOLD}╔══════════════════════════════════════════════════════╗{RESET}")
-    print(f"{BOLD}║  Deployment Doctor — {dc.domain:<33}║{RESET}")
-    print(f"{BOLD}╚══════════════════════════════════════════════════════╝{RESET}\n")
+    print(f"\n{BOLD}+======================================================+{RESET}")
+    print(f"{BOLD}|  Deployment Doctor - {dc.domain:<32}|{RESET}")
+    print(f"{BOLD}+======================================================+{RESET}\n")
 
     status_icons = {
-        DiagnosticStatus.OK: f"{GREEN}✔{RESET}",
-        DiagnosticStatus.WARNING: f"{YELLOW}⚠{RESET}",
-        DiagnosticStatus.CRITICAL: f"{RED}✘{RESET}",
+        DiagnosticStatus.OK: f"{GREEN}[+]{RESET}",
+        DiagnosticStatus.WARNING: f"{YELLOW}[!]{RESET}",
+        DiagnosticStatus.CRITICAL: f"{RED}[-]{RESET}",
     }
 
     for check in report.checks:
-        icon = status_icons.get(check.status, "?")
+        icon = status_icons.get(check.status, "[?]")
         print(f"  {icon}  {BOLD}{check.name}{RESET}: {check.message}")
         if check.suggestion:
-            print(f"      └─ suggestion: {check.suggestion}")
+            print(f"        [-] suggestion: {check.suggestion}")
 
     print()
     if report.is_healthy:
-        print(f"  {GREEN}{BOLD}All checks passed! Your deployment is healthy.{RESET}\n")
+        print(f"  {GREEN}{BOLD}[+] All checks passed! Your deployment is healthy.{RESET}\n")
     else:
         c = report.critical_count
         w = report.warning_count

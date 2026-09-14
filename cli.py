@@ -47,27 +47,27 @@ CYAN = "\033[96m"
 
 
 def info(msg: str) -> None:
-    print(f"  {CYAN}→{RESET} {msg}")
+    print(f"  {CYAN}[*]{RESET} {msg}")
 
 
 def success(msg: str) -> None:
-    print(f"  {GREEN}✔{RESET} {msg}")
+    print(f"  {GREEN}[+]{RESET} {msg}")
 
 
 def warn(msg: str) -> None:
-    print(f"  {YELLOW}⚠{RESET} {msg}")
+    print(f"  {YELLOW}[!]{RESET} {msg}")
 
 
 def error(msg: str) -> None:
-    print(f"  {RED}✘{RESET} {msg}")
+    print(f"  {RED}[-]{RESET} {msg}")
 
 
 def banner() -> None:
     print(f"""
-{BOLD}┌──────────────────────────────────────────────────────────┐
-│  HestiaCP + Django + Gunicorn  —  Deployment Engine      │
-│  Prepared by MohammadAmin Baranzehi (amin.baranzehi.com) │
-└──────────────────────────────────────────────────────────┘{RESET}
+{BOLD}+----------------------------------------------------------+
+|  HestiaCP + Django + Gunicorn  -  Deployment Engine      |
+|  Prepared by MohammadAmin Baranzehi (amin.baranzehi.com) |
++----------------------------------------------------------+{RESET}
 """)
 
 
