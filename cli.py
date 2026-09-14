@@ -298,11 +298,11 @@ def cmd_install(args: argparse.Namespace) -> int:
     hdg_script = PROJECT_ROOT / "hdg"
 
     if bin_dir.exists() and hdg_script.exists():
-        for link_name in ["hdg", "v-django", "hestia-django"]:
+        for link_name in ["hdg", "v-django", "hestia-django", "add-gunicorn-service"]:
             target = bin_dir / link_name
             executor.run(f"ln -sf {hdg_script} {target}", check=False)
         executor.run(f"chmod +x {hdg_script}", check=False)
-        success("Global commands installed: 'hdg', 'v-django', 'hestia-django'")
+        success("Global commands installed: 'hdg', 'v-django', 'add-gunicorn-service'")
     return 0
 
 

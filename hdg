@@ -46,7 +46,7 @@ install_global_links() {
     local bin_dir="/usr/local/bin"
     [ ! -d "$bin_dir" ] && return 0
 
-    local links=("hdg" "v-django" "hestia-django")
+    local links=("hdg" "v-django" "hestia-django" "add-gunicorn-service")
     local need_install=0
 
     for link in "${links[@]}"; do
