@@ -35,3 +35,6 @@ media/
 dist/
 build/
 *.egg-info/
+
+# hdg state
+.installed
