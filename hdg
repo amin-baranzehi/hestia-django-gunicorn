@@ -83,9 +83,13 @@ self_update() {
 
     if [ -d "${PROJECT_ROOT}/.git" ] && command -v git &>/dev/null; then
         info "Pulling latest changes from git repository..."
+        git -C "$PROJECT_ROOT" checkout -- . 2>/dev/null || true
         git -C "$PROJECT_ROOT" pull --ff-only 2>/dev/null || {
             warn "git pull --ff-only failed, trying standard pull..."
-            git -C "$PROJECT_ROOT" pull || warn "Could not pull git updates (check network or local changes)"
+            git -C "$PROJECT_ROOT" pull 2>/dev/null || {
+                warn "Pull conflict detected, resetting to upstream branch..."
+                git -C "$PROJECT_ROOT" reset --hard "@{u}" 2>/dev/null || warn "Could not pull git updates"
+            }
         }
     else
         info "Git repository not detected, skipping git pull."

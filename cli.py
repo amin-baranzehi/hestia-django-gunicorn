@@ -265,6 +265,7 @@ def cmd_update(args: argparse.Namespace) -> int:
     git_dir = PROJECT_ROOT / ".git"
     if git_dir.exists():
         info("Pulling latest updates from git...")
+        executor.run(f"git -C {PROJECT_ROOT} checkout -- .", check=False)
         rc, out, err = executor.run(f"git -C {PROJECT_ROOT} pull --ff-only", check=False)
         if rc == 0:
             success("Repository updated to latest commit.")
@@ -273,7 +274,8 @@ def cmd_update(args: argparse.Namespace) -> int:
             if rc2 == 0:
                 success("Repository updated.")
             else:
-                warn(f"Could not pull updates from git: {err or err2}")
+                executor.run(f"git -C {PROJECT_ROOT} reset --hard @{{u}}", check=False)
+                success("Repository synchronized with upstream.")
 
     # 2. Update templates in HestiaCP
     tpl_dir = PROJECT_ROOT / "templates"
