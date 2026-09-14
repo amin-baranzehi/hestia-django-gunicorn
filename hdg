@@ -1,0 +1,342 @@
+#!/usr/bin/env bash
+# ──────────────────────────────────────────────────────────────────────────
+# hdg — HestiaCP + Django + Gunicorn Global CLI
+# ──────────────────────────────────────────────────────────────────────────
+# A fast, global tool for deploying and managing Django on HestiaCP.
+#
+# Usage from ANYWHERE on your system:
+#   hdg <domain> <user> [project]       # Quick deploy (auto-detects project)
+#   hdg setup <domain> <user> [project] # Explicit deploy
+#   hdg repair <domain> <user>          # Fix & migrate existing setup
+#   hdg doctor <domain> <user>          # Run health checks
+#   hdg status <domain>                 # Check service status
+#   hdg update                          # Self-update to latest version
+#   hdg install                         # Re-link global commands
+#
+# Prepared by: MohammadAmin Baranzehi — amin.baranzehi.com
+# ──────────────────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+# ── Resolve real project directory even through symlinks ──────────────────
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+PROJECT_ROOT="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+CLI_PY="${PROJECT_ROOT}/cli.py"
+
+# ── Colours ───────────────────────────────────────────────────────────────
+RED='\033[0;91m'
+GREEN='\033[0;92m'
+YELLOW='\033[0;93m'
+CYAN='\033[0;96m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+info()    { echo -e "  ${CYAN}→${NC} $*"; }
+success() { echo -e "  ${GREEN}✔${NC} $*"; }
+warn()    { echo -e "  ${YELLOW}⚠${NC} $*"; }
+error()   { echo -e "  ${RED}✘${NC} $*"; }
+
+# ── Self-installation to /usr/local/bin ───────────────────────────────────
+install_global_links() {
+    local bin_dir="/usr/local/bin"
+    [ ! -d "$bin_dir" ] && return 0
+
+    local links=("hdg" "v-django" "hestia-django")
+    local need_install=0
+
+    for link in "${links[@]}"; do
+        local target="${bin_dir}/${link}"
+        if [ ! -L "$target" ] || [ "$(readlink -f "$target" 2>/dev/null)" != "${PROJECT_ROOT}/hdg" ]; then
+            need_install=1
+            break
+        fi
+    done
+
+    if [ "$need_install" -eq 1 ]; then
+        local SUDO=""
+        [ "${EUID:-$(id -u)}" -ne 0 ] && command -v sudo &>/dev/null && SUDO="sudo"
+
+        for link in "${links[@]}"; do
+            $SUDO ln -sf "${PROJECT_ROOT}/hdg" "${bin_dir}/${link}" 2>/dev/null || true
+        done
+        $SUDO chmod +x "${PROJECT_ROOT}/hdg" 2>/dev/null || true
+
+        if [ ! -f "${PROJECT_ROOT}/.installed" ]; then
+            touch "${PROJECT_ROOT}/.installed" 2>/dev/null || true
+            echo ""
+            success "Installed globally as '${BOLD}hdg${NC}' (also '${BOLD}v-django${NC}')"
+            info "You can now run '${BOLD}hdg <domain> <user>${NC}' from ANY directory!"
+            echo ""
+        fi
+    fi
+}
+
+# ── Self-update command ───────────────────────────────────────────────────
+self_update() {
+    echo ""
+    echo -e "${BOLD}Updating hdg (HestiaCP Django-Gunicorn Engine)...${NC}"
+
+    if [ -d "${PROJECT_ROOT}/.git" ] && command -v git &>/dev/null; then
+        info "Pulling latest changes from git repository..."
+        git -C "$PROJECT_ROOT" pull --ff-only 2>/dev/null || {
+            warn "git pull --ff-only failed, trying standard pull..."
+            git -C "$PROJECT_ROOT" pull || warn "Could not pull git updates (check network or local changes)"
+        }
+    else
+        info "Git repository not detected, skipping git pull."
+    fi
+
+    local hestia_tpl_dir="/usr/local/hestia/data/templates/web/nginx"
+    if [ -d "$hestia_tpl_dir" ]; then
+        info "Updating NGINX templates in HestiaCP..."
+        local SUDO=""
+        [ "${EUID:-$(id -u)}" -ne 0 ] && command -v sudo &>/dev/null && SUDO="sudo"
+        $SUDO cp -f "${PROJECT_ROOT}/templates/django-gunicorn.tpl" "$hestia_tpl_dir/" 2>/dev/null || true
+        $SUDO cp -f "${PROJECT_ROOT}/templates/django-gunicorn.stpl" "$hestia_tpl_dir/" 2>/dev/null || true
+        success "NGINX templates updated in ${hestia_tpl_dir}"
+    fi
+
+    install_global_links
+    success "hdg is up to date and ready!"
+    echo ""
+    exit 0
+}
+
+# ── Handle self-install / update directly ─────────────────────────────────
+case "${1:-}" in
+    install|self-install)
+        install_global_links
+        success "Global installation complete! Run '${BOLD}hdg${NC}' from anywhere."
+        exit 0
+        ;;
+    update|self-update)
+        self_update
+        ;;
+esac
+
+# ── Automatically install or update global symlink on run ────────────────
+install_global_links 2>/dev/null || true
+
+# ── Try Python engine first ──────────────────────────────────────────────
+if command -v python3 &>/dev/null && [ -f "$CLI_PY" ]; then
+    python3 "$CLI_PY" "$@"
+    exit $?
+fi
+
+# ══════════════════════════════════════════════════════════════════════════
+# Bash fallback (self-contained, for servers without full Python setup)
+# ══════════════════════════════════════════════════════════════════════════
+
+usage() {
+    echo -e "${BOLD}hdg${NC} — HestiaCP + Django + Gunicorn CLI"
+    echo ""
+    echo "Usage:"
+    echo "  hdg <domain> <user> [project]       # Auto-deploy"
+    echo "  hdg repair <domain> <user>          # Fix existing deployment"
+    echo "  hdg doctor <domain> <user>          # Check deployment health"
+    echo "  hdg update                          # Self-update"
+    echo ""
+    echo "Examples:"
+    echo "  hdg example.com admin myproject"
+    echo "  hdg example.com admin               # auto-detects config/wsgi.py"
+    echo "  hdg repair example.com admin"
+    echo "  hdg update"
+    exit 1
+}
+
+# ── Handle 'repair' ───────────────────────────────────────────────────────
+if [ "${1:-}" = "repair" ]; then
+    [ "$#" -lt 3 ] && usage
+    DOMAIN="$2"
+    USER="$3"
+    SERVICE_NAME="gunicorn-${DOMAIN}"
+    SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+
+    if [ ! -f "$SERVICE_FILE" ]; then
+        error "Service file not found: $SERVICE_FILE"
+        exit 1
+    fi
+
+    info "Repairing deployment for: $DOMAIN"
+    BACKUP="${SERVICE_FILE}.bak.$(date +%Y%m%d_%H%M%S)"
+    cp "$SERVICE_FILE" "$BACKUP"
+    success "Backed up to: $BACKUP"
+
+    "$0" "$DOMAIN" "$USER"
+    exit $?
+fi
+
+# ── Handle 'setup' explicit keyword ──────────────────────────────────────
+if [ "${1:-}" = "setup" ]; then
+    shift
+fi
+
+# ── Parse arguments ──────────────────────────────────────────────────────
+[ "$#" -lt 2 ] && usage
+
+DOMAIN="$1"
+USER="$2"
+PROJECT="${3:-}"
+
+HOMEDIR="/home/$USER"
+WEBDIR="$HOMEDIR/web/$DOMAIN/public_html"
+SERVICE_NAME="gunicorn-${DOMAIN}"
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+
+if [ ! -d "$WEBDIR" ]; then
+    error "Domain directory not found → $WEBDIR"
+    exit 1
+fi
+
+# ── Virtualenv detection ─────────────────────────────────────────────────
+if [ -d "$WEBDIR/venv" ]; then
+    VENV_BIN="$WEBDIR/venv/bin"
+elif [ -d "$WEBDIR/.venv" ]; then
+    VENV_BIN="$WEBDIR/.venv/bin"
+elif [ -d "$HOMEDIR/.virtualenvs/$DOMAIN" ]; then
+    VENV_BIN="$HOMEDIR/.virtualenvs/$DOMAIN/bin"
+else
+    error "Virtual environment not found in:"
+    error "  $WEBDIR/venv"
+    error "  $WEBDIR/.venv"
+    error "  $HOMEDIR/.virtualenvs/$DOMAIN"
+    exit 1
+fi
+
+if [ ! -f "$VENV_BIN/gunicorn" ]; then
+    error "Gunicorn is not installed in the virtualenv ($VENV_BIN/gunicorn missing)."
+    error "Install it: $VENV_BIN/pip install gunicorn"
+    exit 1
+fi
+
+# ── WSGI auto-detection ──────────────────────────────────────────────────
+WSGI_MODULE=""
+
+if [ -n "$PROJECT" ] && [ -f "$WEBDIR/$PROJECT/wsgi.py" ]; then
+    WSGI_MODULE="${PROJECT}.wsgi:application"
+    info "WSGI module (specified): $WSGI_MODULE"
+elif [ -f "$WEBDIR/config/wsgi.py" ]; then
+    WSGI_MODULE="config.wsgi:application"
+    info "WSGI module (detected modular): $WSGI_MODULE"
+else
+    DETECTED_WSGI=$(find "$WEBDIR" -maxdepth 3 -name "wsgi.py" \
+                    -not -path "*/venv/*" \
+                    -not -path "*/.venv/*" \
+                    -not -path "*/site-packages/*" \
+                    | head -n 1)
+
+    if [ -n "$DETECTED_WSGI" ]; then
+        REL_WSGI="${DETECTED_WSGI#$WEBDIR/}"
+        MODULE_PATH="${REL_WSGI%/wsgi.py}"
+        MODULE_DOT=$(echo "$MODULE_PATH" | tr '/' '.')
+
+        if [ "$REL_WSGI" = "wsgi.py" ]; then
+            WSGI_MODULE="wsgi:application"
+        else
+            WSGI_MODULE="${MODULE_DOT}.wsgi:application"
+        fi
+        info "WSGI module (auto-detected): $WSGI_MODULE"
+    else
+        error "Could not auto-detect wsgi.py in $WEBDIR"
+        error "Please specify the project name: $0 $DOMAIN $USER <project_name>"
+        exit 1
+    fi
+fi
+
+# ── Environment & Workers ────────────────────────────────────────────────
+ENV_FILE_LINE=""
+if [ -f "$WEBDIR/.env" ]; then
+    ENV_FILE_LINE="EnvironmentFile=$WEBDIR/.env"
+    info "Environment file detected: $WEBDIR/.env"
+fi
+
+CPU_COUNT=$(nproc 2>/dev/null || echo 1)
+WORKERS=$(( (2 * CPU_COUNT) + 1 ))
+[ "$WORKERS" -gt 9 ] && WORKERS=9
+SOCK_PATH="$WEBDIR/gunicorn.sock"
+
+# ── Print summary ────────────────────────────────────────────────────────
+echo ""
+echo -e "${BOLD}Deployment Summary${NC}"
+echo "  Domain    : $DOMAIN"
+echo "  User      : $USER"
+echo "  WSGI      : $WSGI_MODULE"
+echo "  Workers   : $WORKERS"
+echo "  Socket    : $SOCK_PATH"
+echo "  Service   : $SERVICE_NAME"
+echo ""
+
+# ── Generate service file ────────────────────────────────────────────────
+if [ -f "$SERVICE_FILE" ]; then
+    BACKUP="${SERVICE_FILE}.bak.$(date +%Y%m%d_%H%M%S)"
+    cp "$SERVICE_FILE" "$BACKUP"
+    warn "Existing service backed up to: $BACKUP"
+fi
+
+cat <<EOF | sudo tee "$SERVICE_FILE" > /dev/null
+# ──────────────────────────────────────────────────────────────────
+# Gunicorn service for $DOMAIN
+# Auto-generated by hdg (HestiaCP Django-Gunicorn Engine)
+# ──────────────────────────────────────────────────────────────────
+[Unit]
+Description=Gunicorn instance for $DOMAIN (Django)
+After=network.target
+
+[Service]
+User=$USER
+Group=www-data
+WorkingDirectory=$WEBDIR
+Environment="PATH=$VENV_BIN:/usr/local/bin:/usr/bin"
+Environment="PYTHONUNBUFFERED=1"
+$ENV_FILE_LINE
+ExecStart=$VENV_BIN/gunicorn \\
+          --access-logfile - \\
+          --error-logfile - \\
+          --workers $WORKERS \\
+          --threads 2 \\
+          --worker-class=gthread \\
+          --bind unix:$SOCK_PATH \\
+          --umask 007 \\
+          --log-level=info \\
+          $WSGI_MODULE
+
+Restart=always
+RestartSec=3
+ProtectSystem=full
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+success "Generated: $SERVICE_FILE"
+
+# ── Fix database permissions ─────────────────────────────────────────────
+if [ -f "$WEBDIR/db.sqlite3" ]; then
+    sudo chown "$USER:www-data" "$WEBDIR/db.sqlite3"
+    sudo chmod 664 "$WEBDIR/db.sqlite3"
+    success "Fixed SQLite permissions on db.sqlite3"
+fi
+
+# ── Enable & start service ───────────────────────────────────────────────
+sudo systemctl daemon-reload
+sudo systemctl enable "$SERVICE_NAME"
+sudo systemctl restart "$SERVICE_NAME"
+
+sleep 1
+if sudo systemctl is-active --quiet "$SERVICE_NAME"; then
+    success "Service $SERVICE_NAME is running!"
+else
+    error "Service failed to start. Logs:"
+    sudo journalctl -u "$SERVICE_NAME" -n 20 --no-pager
+    exit 1
+fi
+
+echo ""
+echo -e "${GREEN}${BOLD}Deployment completed successfully!${NC}"
