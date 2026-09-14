@@ -226,20 +226,28 @@ class DeploymentDoctor(IDeploymentDoctor):
 
         rc, stdout, _ = self._executor.run(
             f"curl -s -o /dev/null -w '%{{http_code}}' "
-            f"--unix-socket {sock} http://localhost/ --max-time 5",
+            f"--unix-socket {sock} -H 'Host: {dc.domain}' http://localhost/ --max-time 5",
             check=False,
         )
-        if rc == 0 and stdout.strip("'\"") in ("200", "301", "302", "403"):
+        code = stdout.strip("'\"")
+        if rc == 0 and code in ("200", "301", "302", "304", "403", "404"):
             report.checks.append(DiagnosticCheck(
                 name="Socket Response",
                 status=DiagnosticStatus.OK,
-                message=f"Socket responds with HTTP {stdout.strip(chr(39))}.",
+                message=f"Socket responds with HTTP {code}.",
+            ))
+        elif rc == 0 and code == "400":
+            report.checks.append(DiagnosticCheck(
+                name="Socket Response",
+                status=DiagnosticStatus.WARNING,
+                message=f"Socket responded with HTTP 400 (Bad Request).",
+                suggestion=f"Ensure '{dc.domain}' is in ALLOWED_HOSTS in settings.py",
             ))
         else:
             report.checks.append(DiagnosticCheck(
                 name="Socket Response",
                 status=DiagnosticStatus.WARNING,
-                message=f"Socket did not respond as expected (rc={rc}, response={stdout}).",
+                message=f"Socket did not respond as expected (rc={rc}, response={code}).",
                 suggestion=f"journalctl -u {dc.service_name} -n 20",
             ))
 
