@@ -76,6 +76,21 @@ install_global_links() {
     fi
 }
 
+# ── NGINX Templates Installation ──────────────────────────────────────────
+install_nginx_templates() {
+    local hestia_tpl_dir="/usr/local/hestia/data/templates/web/nginx"
+    if [ -d "$hestia_tpl_dir" ]; then
+        info "Installing NGINX templates to HestiaCP..."
+        local SUDO=""
+        [ "${EUID:-$(id -u)}" -ne 0 ] && command -v sudo &>/dev/null && SUDO="sudo"
+        $SUDO cp -f "${PROJECT_ROOT}/templates/django-gunicorn.tpl" "$hestia_tpl_dir/" 2>/dev/null || true
+        $SUDO cp -f "${PROJECT_ROOT}/templates/django-gunicorn.stpl" "$hestia_tpl_dir/" 2>/dev/null || true
+        success "NGINX templates installed in ${hestia_tpl_dir}"
+    else
+        warn "HestiaCP template directory not found: ${hestia_tpl_dir}"
+    fi
+}
+
 # ── Self-update command ───────────────────────────────────────────────────
 self_update() {
     echo ""
@@ -104,15 +119,7 @@ self_update() {
         info "Git repository not detected, skipping git pull."
     fi
 
-    local hestia_tpl_dir="/usr/local/hestia/data/templates/web/nginx"
-    if [ -d "$hestia_tpl_dir" ]; then
-        info "Updating NGINX templates in HestiaCP..."
-        local SUDO=""
-        [ "${EUID:-$(id -u)}" -ne 0 ] && command -v sudo &>/dev/null && SUDO="sudo"
-        $SUDO cp -f "${PROJECT_ROOT}/templates/django-gunicorn.tpl" "$hestia_tpl_dir/" 2>/dev/null || true
-        $SUDO cp -f "${PROJECT_ROOT}/templates/django-gunicorn.stpl" "$hestia_tpl_dir/" 2>/dev/null || true
-        success "NGINX templates updated in ${hestia_tpl_dir}"
-    fi
+    install_nginx_templates
 
     install_global_links
     success "hdg is up to date and ready!"
@@ -129,20 +136,6 @@ case "${1:-}" in
         ;;
     update|self-update)
         self_update
-        ;;
-    install-template|install-templates)
-        local hestia_tpl_dir="/usr/local/hestia/data/templates/web/nginx"
-        if [ -d "$hestia_tpl_dir" ]; then
-            info "Installing NGINX templates to HestiaCP..."
-            local SUDO=""
-            [ "${EUID:-$(id -u)}" -ne 0 ] && command -v sudo &>/dev/null && SUDO="sudo"
-            $SUDO cp -f "${PROJECT_ROOT}/templates/django-gunicorn.tpl" "$hestia_tpl_dir/" 2>/dev/null || true
-            $SUDO cp -f "${PROJECT_ROOT}/templates/django-gunicorn.stpl" "$hestia_tpl_dir/" 2>/dev/null || true
-            success "NGINX templates installed in ${hestia_tpl_dir}"
-        else
-            warn "HestiaCP template directory not found: ${hestia_tpl_dir}"
-        fi
-        exit 0
         ;;
 esac
 
@@ -175,6 +168,12 @@ usage() {
     echo "  hdg update"
     exit 1
 }
+
+# ── Handle 'install-templates' / 'install-template' ───────────────────────
+if [ "${1:-}" = "install-templates" ] || [ "${1:-}" = "install-template" ]; then
+    install_nginx_templates
+    exit 0
+fi
 
 # ── Handle 'repair' ───────────────────────────────────────────────────────
 if [ "${1:-}" = "repair" ]; then
