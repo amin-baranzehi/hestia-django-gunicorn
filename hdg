@@ -88,8 +88,14 @@ install_nginx_templates() {
 
         # Also copy to php-fpm subdirectory if HestiaCP runs in Nginx-only mode
         if [ -d "${hestia_tpl_dir}/php-fpm" ]; then
-            $SUDO cp -f "${PROJECT_ROOT}/templates/django-gunicorn.tpl" "${hestia_tpl_dir}/php-fpm/" 2>/dev/null || true
-            $SUDO cp -f "${PROJECT_ROOT}/templates/django-gunicorn.stpl" "${hestia_tpl_dir}/php-fpm/" 2>/dev/null || true
+            local php_fpm_dir="${PROJECT_ROOT}/templates/php-fpm"
+            if [ -d "$php_fpm_dir" ]; then
+                $SUDO cp -f "${php_fpm_dir}/django-gunicorn.tpl" "${hestia_tpl_dir}/php-fpm/" 2>/dev/null || true
+                $SUDO cp -f "${php_fpm_dir}/django-gunicorn.stpl" "${hestia_tpl_dir}/php-fpm/" 2>/dev/null || true
+            else
+                $SUDO cp -f "${PROJECT_ROOT}/templates/django-gunicorn.tpl" "${hestia_tpl_dir}/php-fpm/" 2>/dev/null || true
+                $SUDO cp -f "${PROJECT_ROOT}/templates/django-gunicorn.stpl" "${hestia_tpl_dir}/php-fpm/" 2>/dev/null || true
+            fi
         fi
         success "NGINX templates installed in ${hestia_tpl_dir}"
     else

@@ -30,18 +30,26 @@ class HestiaNginxManager(INginxManager):
 
     def install_templates(self, tpl_source: Path, stpl_source: Path) -> None:
         """Copy templates to the HestiaCP template directory and set permissions."""
-        dest_dirs = [HESTIA_TEMPLATE_DIR]
+        # 1. Main NGINX templates (proxy mode)
+        for src, dst in [(tpl_source, self.tpl_dest), (stpl_source, self.stpl_dest)]:
+            if not self._executor.file_exists(src):
+                raise FileNotFoundError(f"Template source not found: {src}")
+
+            content = src.read_text(encoding="utf-8")
+            self._executor.write_file(dst, content, mode=0o644)
+            self._executor.run(f"chown root:root {dst}")
+
+        # 2. PHP-FPM NGINX templates (standalone mode)
         php_fpm_dir = HESTIA_TEMPLATE_DIR / "php-fpm"
         if self._executor.file_exists(php_fpm_dir):
-            dest_dirs.append(php_fpm_dir)
+            php_fpm_tpl = tpl_source.parent / "php-fpm" / tpl_source.name
+            php_fpm_stpl = stpl_source.parent / "php-fpm" / stpl_source.name
+            src_tpl = php_fpm_tpl if self._executor.file_exists(php_fpm_tpl) else tpl_source
+            src_stpl = php_fpm_stpl if self._executor.file_exists(php_fpm_stpl) else stpl_source
 
-        for dest_dir in dest_dirs:
-            for src, name in [(tpl_source, f"{TEMPLATE_NAME}.tpl"), (stpl_source, f"{TEMPLATE_NAME}.stpl")]:
-                if not self._executor.file_exists(src):
-                    raise FileNotFoundError(f"Template source not found: {src}")
-
+            for src, name in [(src_tpl, f"{TEMPLATE_NAME}.tpl"), (src_stpl, f"{TEMPLATE_NAME}.stpl")]:
                 content = src.read_text(encoding="utf-8")
-                dst = dest_dir / name
+                dst = php_fpm_dir / name
                 self._executor.write_file(dst, content, mode=0o644)
                 self._executor.run(f"chown root:root {dst}")
 
