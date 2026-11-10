@@ -62,8 +62,8 @@ hestia-django-gunicorn/
 Clone the repository anywhere (e.g. `/opt` or your home directory) and run `hdg` once:
 
 ```bash
-git clone git@git.amin.baranzehi.com:amin/hdg.git
-cd hdg
+git clone https://github.com/amin-baranzehi/hestia-django-gunicorn.git
+cd hestia-django-gunicorn
 
 # Installs templates to HestiaCP and links 'hdg' globally
 sudo ./hdg install-templates

@@ -266,11 +266,18 @@ def cmd_update(args: argparse.Namespace) -> int:
     if git_dir.exists():
         info("Pulling latest updates from git...")
         executor.run(f"git -C {PROJECT_ROOT} checkout -- .", check=False)
-        rc, out, err = executor.run(f"git -C {PROJECT_ROOT} pull --ff-only", check=False)
+
+        # Check available remotes (prefer 'github' if present, otherwise default/origin)
+        rc_rem, out_rem, _ = executor.run(f"git -C {PROJECT_ROOT} remote", check=False)
+        remotes = out_rem.split() if rc_rem == 0 else []
+        remote = "github" if "github" in remotes else ""
+        pull_target = f"{remote} main" if remote else ""
+
+        rc, out, err = executor.run(f"git -C {PROJECT_ROOT} pull --ff-only {pull_target}".strip(), check=False)
         if rc == 0:
-            success("Repository updated to latest commit.")
+            success(f"Repository updated to latest commit{' from ' + remote if remote else ''}.")
         else:
-            rc2, out2, err2 = executor.run(f"git -C {PROJECT_ROOT} pull", check=False)
+            rc2, out2, err2 = executor.run(f"git -C {PROJECT_ROOT} pull {pull_target}".strip(), check=False)
             if rc2 == 0:
                 success("Repository updated.")
             else:
