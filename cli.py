@@ -336,7 +336,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_doctor.add_argument("user", help="HestiaCP system user")
 
     # install-templates
-    sub.add_parser("install-templates", help="Install NGINX templates to HestiaCP")
+    p_install_tpl = sub.add_parser(
+        "install-templates",
+        aliases=["install-template"],
+        help="Install NGINX templates to HestiaCP",
+    )
+    p_install_tpl.add_argument("extra", nargs="*", help=argparse.SUPPRESS)
 
     # update
     sub.add_parser("update", help="Update hdg and NGINX templates to latest version")
@@ -354,7 +359,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     # Convenience shorthand: if first arg is a domain or not a command, default to 'setup'
     known_commands = {
-        "setup", "repair", "doctor", "install-templates",
+        "setup", "repair", "doctor", "install-templates", "install-template",
         "update", "install", "status", "-h", "--help",
     }
     if len(sys.argv) > 1 and sys.argv[1] not in known_commands:
@@ -372,6 +377,7 @@ def main() -> int:
         "repair": cmd_repair,
         "doctor": cmd_doctor,
         "install-templates": cmd_install_templates,
+        "install-template": cmd_install_templates,
         "update": cmd_update,
         "install": cmd_install,
         "status": cmd_status,
