@@ -30,17 +30,20 @@ class HestiaNginxManager(INginxManager):
 
     def install_templates(self, tpl_source: Path, stpl_source: Path) -> None:
         """Copy templates to the HestiaCP template directory and set permissions."""
-        for src, dst in [(tpl_source, self.tpl_dest), (stpl_source, self.stpl_dest)]:
-            if not self._executor.file_exists(src):
-                raise FileNotFoundError(f"Template source not found: {src}")
+        dest_dirs = [HESTIA_TEMPLATE_DIR]
+        php_fpm_dir = HESTIA_TEMPLATE_DIR / "php-fpm"
+        if self._executor.file_exists(php_fpm_dir):
+            dest_dirs.append(php_fpm_dir)
 
-            content = src.read_text(encoding="utf-8")
-            self._executor.write_file(dst, content, mode=0o644)
+        for dest_dir in dest_dirs:
+            for src, name in [(tpl_source, f"{TEMPLATE_NAME}.tpl"), (stpl_source, f"{TEMPLATE_NAME}.stpl")]:
+                if not self._executor.file_exists(src):
+                    raise FileNotFoundError(f"Template source not found: {src}")
 
-        # Set ownership to root:root
-        self._executor.run(
-            f"chown root:root {self.tpl_dest} {self.stpl_dest}"
-        )
+                content = src.read_text(encoding="utf-8")
+                dst = dest_dir / name
+                self._executor.write_file(dst, content, mode=0o644)
+                self._executor.run(f"chown root:root {dst}")
 
     def rebuild_domain(self, domain_config: DomainConfig) -> None:
         """Force-rebuild the NGINX configuration for a domain and restart."""
